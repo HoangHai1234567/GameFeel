@@ -65,7 +65,65 @@ namespace FeedbackKit.EditorTools
             serializedObject.ApplyModifiedProperties();
 
             DrawRuntimeControls(player);
+            DrawValuesClipboard(player);
         }
+
+        // Play mode: chép số đã chỉnh. Ngoài Play: dán vào player đang chọn (thường là prefab), giữ tham chiếu.
+        void DrawValuesClipboard(FeedbackPlayer player)
+        {
+            EditorGUILayout.Space(4f);
+            if (Application.isPlaying)
+            {
+                if (GUILayout.Button(new GUIContent("Copy giá trị (để dán vào prefab sau khi thoát Play)",
+                        "Chép số, ease, âm lượng, bật/tắt… của mọi bước. Không chép Target, Clips, Unity Event.")))
+                {
+                    FeedbackValuesClipboard.Snapshot snap = FeedbackValuesClipboard.Capture(player);
+                    FeedbackValuesClipboard.Store(snap);
+                    Debug.Log($"[FeedbackKit] Đã copy {snap.Entries.Count} giá trị từ '{Describe(snap)}'. Thoát Play, chọn player trong prefab rồi bấm Paste.");
+                }
+                return;
+            }
+
+            FeedbackValuesClipboard.Snapshot stored = FeedbackValuesClipboard.Stored;
+            if (stored == null) return;
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField($"Clipboard: '{Describe(stored)}' — {stored.FeedbackTypes.Count} bước, copy lúc {stored.CapturedAt}",
+                    EditorStyles.wordWrappedMiniLabel);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Paste giá trị (giữ tham chiếu)")) Paste(player, stored);
+                    if (GUILayout.Button("Xoá", GUILayout.Width(48f))) FeedbackValuesClipboard.Clear();
+                }
+            }
+        }
+
+        void Paste(FeedbackPlayer player, FeedbackValuesClipboard.Snapshot stored)
+        {
+            if (!string.IsNullOrEmpty(stored.Title) && stored.Title != player.Title &&
+                !EditorUtility.DisplayDialog("FeedbackKit",
+                    $"Clipboard copy từ '{stored.Title}', player đang chọn là '{player.Title}'. Vẫn dán?", "Dán", "Huỷ"))
+            {
+                return;
+            }
+
+            Undo.RecordObject(player, "Paste FeedbackKit values");
+            FeedbackValuesClipboard.ApplyResult result = FeedbackValuesClipboard.Apply(stored, player);
+            serializedObject.Update();
+            if (result.Ok)
+            {
+                EditorUtility.SetDirty(player);
+                Debug.Log("[FeedbackKit] " + result.Message + " Nhớ Save prefab.");
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("FeedbackKit", result.Message, "OK");
+            }
+        }
+
+        static string Describe(FeedbackValuesClipboard.Snapshot snap) =>
+            string.IsNullOrEmpty(snap.Title) ? snap.SourceName : snap.Title;
 
         void DrawFeedbackList()
         {

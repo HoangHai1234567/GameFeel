@@ -196,6 +196,11 @@ Thêm component `FeedbackLab` vào một object trong scene dev → góc trái c
 
 Trong Editor: chọn object có FeedbackPlayer khi đang Play mode → Inspector có khu **Test** với các nút tương tự.
 
+**Giữ số chỉnh trong Play mode:** Unity trả mọi thay đổi lúc Play về cũ khi thoát Play. Chỉnh cho ưng trong Play → bấm **Copy giá trị** (cuối Inspector) → thoát Play → chọn đúng FeedbackPlayer trong prefab → **Paste giá trị (giữ tham chiếu)** → Save prefab.
+- Chép: số, bool, enum, chuỗi, vector, màu, curve, mảng số (vd `LadderSemitones`) của player và mọi bước. KHÔNG chép tham chiếu object (`Target`, `Clips`…) và Unity Event — đích giữ nguyên của nó.
+- Dán theo thứ tự bước; số bước hoặc loại bước khác nhau ⇒ từ chối cả lần dán. Khác `Title` ⇒ hỏi lại. Có Undo.
+- Clipboard nằm trong `SessionState` (sống qua lần thoát Play, mất khi tắt Editor).
+
 ---
 
 ## 7. Quy tắc dùng (rút từ nghiên cứu Feel)
