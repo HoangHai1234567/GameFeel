@@ -101,7 +101,7 @@ Các hàm không tham số hoặc một `float` gắn được thẳng vào Unit
 | Menu | Class | Dùng cho | Mặc định |
 |---|---|---|---|
 | Transform/Scale Punch | `ScalePunchFeedback` | Nảy khi chạm, nhận item, đổi số | +15%, 0.25s, vibrato 6, elasticity 0.6 |
-| Transform/Scale Tween | `ScaleTweenFeedback` | Popup mở/đóng, xuất hiện | 0.85→1, 0.3s, OutBack (ngược: InCubic) |
+| Transform/Scale Tween | `ScaleTweenFeedback` | Popup mở/đóng, xuất hiện. `Shape = PeakThenSettle`: From → Peak → To hai đoạn (nhỏ → to quá một chút → về), intensity nhân độ vượt | 0.85→1, 0.3s, OutBack (ngược: InCubic); Peak 1.12, PeakAt 0.55 |
 | Transform/Squash & Stretch | `SquashStretchFeedback` | Rơi chạm đáy, nhấc lên, va chạm | 20%, 0.3s, giữ diện tích |
 | Transform/Position Punch | `PositionPunchFeedback` | Nhún lên, giật theo hướng | (0,12,0), 0.25s |
 | Transform/Rotation Punch | `RotationPunchFeedback` | Lắc icon, mascot | 12°, 0.3s |

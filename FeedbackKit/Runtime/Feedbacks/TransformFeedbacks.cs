@@ -62,24 +62,50 @@ namespace FeedbackKit
 
     /// <summary>
     /// Scale từ From tới To (popup mở: 0.85 → 1, OutBack). Chạy ngược thì đi To → From với ReverseEase.
-    /// Không dùng intensity.
+    /// Shape = PeakThenSettle: From → Peak → To thành hai đoạn chỉnh riêng (nhỏ → phóng quá tay → về scale gốc);
+    /// khi đó intensity nhân độ vượt (Peak − To) và Reduce motion giảm độ vượt.
     /// </summary>
     [Serializable, FeedbackMenu("Transform/Scale Tween")]
     public class ScaleTweenFeedback : TweenFeedback
     {
+        public enum Shapes
+        {
+            /// <summary>Một tween From → To, độ nảy do Ease (OutBack…) quyết định.</summary>
+            Direct,
+
+            /// <summary>Hai đoạn: From → Peak (PeakEase) rồi Peak → To (SettleEase).</summary>
+            PeakThenSettle
+        }
+
         public Transform Target;
 
-        [Tooltip("Bật: From/To là hệ số nhân với scale gốc. Tắt: giá trị scale tuyệt đối.")]
+        [Tooltip("Bật: From/To/Peak là hệ số nhân với scale gốc. Tắt: giá trị scale tuyệt đối.")]
         public bool RelativeToRest = true;
+
+        [Tooltip("Direct: From → To một tween. PeakThenSettle: From → Peak → To (nhỏ → to quá một chút → về).")]
+        public Shapes Shape = Shapes.Direct;
 
         public Vector3 From = new Vector3(0.85f, 0.85f, 0.85f);
 
+        [Tooltip("PeakThenSettle: cỡ ở đỉnh (vd 1.12 = to hơn đích 12%).")]
+        public Vector3 Peak = new Vector3(1.12f, 1.12f, 1f);
+
         public Vector3 To = Vector3.one;
 
+        [Tooltip("Direct: ease của cả tween.")]
         public Ease Ease = Ease.OutBack;
 
         [Tooltip("Chỉ dùng cho Back/Elastic. 1.70158 ≈ vượt 10%; 1.0–1.2 nhẹ hơn.")]
         public float Overshoot = 1.70158f;
+
+        [Tooltip("PeakThenSettle: phần thời lượng (Seconds) dùng để lên tới đỉnh; phần còn lại để về.")]
+        [Range(0.05f, 0.95f)] public float PeakAt = 0.55f;
+
+        [Tooltip("PeakThenSettle: ease đoạn lên đỉnh — ease-out cho cảm giác bật ra.")]
+        public Ease PeakEase = Ease.OutQuad;
+
+        [Tooltip("PeakThenSettle: ease đoạn từ đỉnh về đích.")]
+        public Ease SettleEase = Ease.InOutSine;
 
         [Tooltip("Ease khi player chạy ngược (đóng) — thường là ease-in.")]
         public Ease ReverseEase = Ease.InCubic;
@@ -90,6 +116,8 @@ namespace FeedbackKit
         {
             Seconds = 0.3f;
         }
+
+        public override bool IsMotion => Shape == Shapes.PeakThenSettle;
 
         protected override void OnInitialize()
         {
@@ -102,6 +130,12 @@ namespace FeedbackKit
         protected override void OnPlay(FeedbackContext ctx)
         {
             if (Target == null) return;
+            if (Shape == Shapes.PeakThenSettle && !ctx.Reverse)
+            {
+                PlayPeakThenSettle(ctx);
+                return;
+            }
+
             Vector3 a = Resolve(ctx.Reverse ? To : From);
             Vector3 b = Resolve(ctx.Reverse ? From : To);
 
@@ -111,6 +145,24 @@ namespace FeedbackKit
             if (ctx.Reverse) t.SetEase(ReverseEase);
             else t.SetEase(Ease, Overshoot);
             Track(t, ctx);
+        }
+
+        // Chạy ngược (đóng) vẫn đi To → From một tween với ReverseEase — chỉ chiều mở mới có đỉnh.
+        void PlayPeakThenSettle(FeedbackContext ctx)
+        {
+            Vector3 a = Resolve(From);
+            Vector3 b = Resolve(To);
+            // Intensity / Reduce motion chỉ co giãn PHẦN VƯỢT so với đích, không đổi điểm đầu–cuối.
+            Vector3 peak = b + (Resolve(Peak) - b) * ctx.Intensity;
+            float total = ScaledSeconds(ctx);
+            float up = total * Mathf.Clamp(PeakAt, 0.05f, 0.95f);
+
+            KillTween();
+            Target.localScale = a;
+            Sequence s = DOTween.Sequence();
+            s.Append(Target.DOScale(peak, up).SetEase(PeakEase));
+            s.Append(Target.DOScale(b, total - up).SetEase(SettleEase));
+            Track(s, ctx);
         }
 
         protected override void OnSkip(bool reverse)
