@@ -120,6 +120,19 @@ Mọi feedback có **Timing**: InitialDelay, Cooldown, Repeats, RepeatDelay, Pla
 
 **Lưu ý giá trị:** thông số mặc định là điểm khởi đầu theo `game-feel-guide.md` — chỉnh khi playtest trên máy thật.
 
+**Pop-in (nhỏ → lớn hơn → gốc):** vật xuất hiện nên vượt quá scale gốc rồi mới về (guide 4.7). Dùng `Scale Tween` với **`Shape = PeakThenSettle`** và đặt `Peak` theo loại vật:
+
+| Loại vật | From | Peak | To | Seconds |
+|---|---|---|---|---|
+| Vật nhỏ (ô, icon, coin, tick) | 0–0.3 | 1.15–1.2 | 1 | 0.2–0.3 |
+| Hero (sao, power-up, chữ combo lớn) | 0 | 1.25–1.3 | 1 | 0.3–0.4 |
+| Nút / chữ trên màn kết quả | 0.5–0.8 | 1.08–1.1 | 1 | 0.2–0.3 |
+| Popup / panel lớn | 0.85 | 1.03–1.05 | 1 | 0.25–0.35 |
+
+`PeakAt` 0.55–0.65, `PeakEase` OutQuad, `SettleEase` InOutSine (mặc định). Peak mặc định (1.12, 1.12, 1) hợp vật nhỏ, **quá to cho popup**.
+
+Nếu dùng `Shape = Direct` + OutBack: mức vượt tỉ lệ với quãng From → To, nên quãng ngắn (0.85 → 1) với Overshoot mặc định chỉ vượt tới ~1.015 — gần như không thấy (cần Overshoot ≈ 3 để có ~1.04). Vì vậy ưu tiên PeakThenSettle.
+
 ---
 
 ## 5. Công thức nhanh
@@ -133,6 +146,8 @@ Mọi feedback có **Timing**: InitialDelay, Cooldown, Repeats, RepeatDelay, Pla
    - `DeniedFeedback`: Sound "nope" + Haptic Warning (nút bị khoá tự rung ngang).
 
 Mặc định: nhấn 0.92 trong 0.08s (OutQuad), nhả về 1 trong 0.2s (OutBack, overshoot 1.5), kéo ra ngoài thì bật về.
+
+Lưu ý: quãng nhả chỉ 0.92 → 1, nên overshoot 1.5 chỉ vượt tới ~1.006 (gần như không thấy). Muốn nút nảy vượt rõ (~1.03) khi nhả: `ReleaseOvershoot ≈ 4`.
 
 ### 5.2 Chạm chọn một vật
 Player "Select" trên vật, Target = child Visual:
@@ -171,7 +186,7 @@ Player "Popup" (Unscaled) trên object cha (đừng đặt trên chính object b
 1. Set Active (Target = panel, State = true)
 2. **Holding Pause** (0s) — bắt buộc
 3. CanvasGroup Fade (0→1, 0.25s)
-4. Scale Tween (0.85→1, 0.3s, OutBack; ngược InCubic)
+4. Scale Tween (`Shape = PeakThenSettle`, From 0.85 → **Peak 1.04** → To 1, 0.3s; ngược InCubic)
 5. Sound "open" — `Timing.PlayWhen = OnlyForward`
 
 Mở: `popupFx.Play()`. Đóng: `popupFx.PlayReverse()`.
@@ -182,11 +197,20 @@ Vì sao cần Holding Pause: ở chế độ Parallel mọi feedback bắt đầ
 Player "Win" (Unscaled):
 1. Shake container UI (8,8,0) 0.3s · Sound hero · Haptic Success
 2. Holding Pause 0.15s
-3. Scale Tween sao 1 + Sound (Ladder) → Pause 0.3s → sao 2 → Pause 0.3s → sao 3
+3. Scale Tween sao 1 (PeakThenSettle, From 0 → Peak 1.3 → To 1, 0.35s) + Sound (Ladder) → Pause 0.3s → sao 2 → Pause 0.3s → sao 3
 4. Holding Pause 0.1s
 5. CanvasGroup Fade nút Next
 
 Chạm màn hình → `winFx.SkipToEnd()`. Nạp sẵn level sau trong lúc chuỗi đang chạy.
+
+### 5.8 Vật xuất hiện / biến mất (pop-in: nhỏ → lớn hơn → gốc)
+Player "Appear" trên vật, Target = child Visual:
+1. Scale Tween: `Shape = PeakThenSettle`, `RelativeToRest` bật, From (0,0,0) → Peak (1.15,1.15,1) → To (1,1,1), 0.25s, PeakAt 0.6. Hero (sao, power-up): Peak 1.25–1.3, 0.35s. Bảng đỉnh theo loại vật: mục 4.
+2. Sound "pop" — `Timing.PlayWhen = OnlyForward`.
+
+Hiện: `appearFx.Play()`. Ẩn: `appearFx.PlayReverse()` — chiều ngược là một tween To → From với `ReverseEase`; đặt **`ReverseEase = InBack`** để có gốc → hơi lớn hơn (~1.1) → 0, kiểu "lấy đà rồi biến mất". Muốn ẩn nhanh hơn hiện: dùng player riêng với `DurationMultiplier` nhỏ hơn (ví dụ 0.6).
+
+Nhiều vật cùng xuất hiện: gọi `Play()` lệch 30–60ms mỗi vật (như 5.5). `Play(intensity)` nhân phần vượt: dùng để vật quan trọng nảy mạnh hơn mà không phải tạo player mới.
 
 ---
 

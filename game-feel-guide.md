@@ -203,7 +203,7 @@ public class JuicyButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 ```
 
 ### 3.2 Popup / panel
-- **Mở:** scale 0.85 → 1.0 (không từ 0) kèm fade, **250–350ms**, OutBack.
+- **Mở:** pop-in scale 0.85 → **~1.04 → 1.0** (không từ 0) kèm fade, **250–350ms** (4.7). Nếu dùng một tween OutBack từ 0.85 thì overshoot ≈ 3; mặc định 1.70158 chỉ vượt tới ~1.015, gần như không thấy.
 - **Đóng:** nhanh hơn mở, **120–180ms**, ease-in, scale xuống và fade.
 - **Overlap:** icon, label, tia sáng vào trễ hơn khung 50–100ms, chạy song song.
 - Mỗi khoảnh khắc chỉ một phần tử "hero" được overshoot; còn lại dùng ease-out thường.
@@ -307,6 +307,53 @@ public class JuicyButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 - Feedback "tất cả trong một" khó bảo trì hơn feedback nhỏ, nguyên tử. `[nguồn: Feel Blob demo]`
 - Hiện/ẩn cùng một thứ có thể dùng một player chạy xuôi để hiện, chạy ngược để ẩn. `[nguồn: Feel Cards UI demo]`
 
+### 4.7 Pop-in: nhỏ → lớn hơn → scale gốc
+Khi một vật **xuất hiện** (hiện ra, spawn, được nhận, mở ra), đừng tween thẳng từ nhỏ lên scale gốc. Cho nó **vượt quá scale gốc một chút rồi mới về**: **nhỏ → lớn hơn gốc → gốc**. Pha vượt cho vật "lực" và trọng lượng; tween thẳng trông như trượt vào, nhạt.
+
+Dùng cho: popup/panel, ô hoặc vật mới spawn, sao kết màn, icon phần thưởng, item về HUD, dấu tick hoàn thành, chữ khen combo, nút xuất hiện, power-up vừa tạo.
+
+| Loại vật | Từ | Đỉnh | Về | Tổng thời lượng |
+|---|---|---|---|---|
+| Vật nhỏ (ô, icon, coin, tick) | 0–0.3 | 1.15–1.2 | 1 | 0.2–0.3s |
+| Khoảnh khắc hero (sao, power-up, chữ combo lớn) | 0 | 1.25–1.3 | 1 | 0.3–0.4s |
+| Nút / chữ xuất hiện trên màn kết quả | 0.5–0.8 | 1.08–1.1 | 1 | 0.2–0.3s |
+| Popup / panel lớn | 0.8–0.85 (không từ 0, xem 3.2) | 1.03–1.05 | 1 | 0.25–0.35s |
+
+- **Nhịp:** pha lên chiếm ~60–70% thời lượng (ease-out: OutQuad/OutCubic), pha về ~30–40% (OutQuad hoặc InOutSine). **Vượt một lần là đủ**; nảy nhiều lần (Elastic) chỉ cho khoảnh khắc hero.
+- **Vật càng lớn thì vượt càng ít** — panel lớn vượt 3–5% đã thấy rõ.
+- **Vật xuất hiện hàng loạt, lặp liên tục** (ô rơi lấp chỗ): đỉnh thấp (1.05–1.08) hoặc dùng squash khi chạm đáy (5) thay vì pop, để không rối mắt.
+- **Nhiều vật cùng xuất hiện:** stagger 30–60ms (4.1).
+- **Alpha/màu không overshoot** (4.2): fade chạy ease-out thường, song song, đạt 1 trước hoặc cùng lúc với đỉnh scale.
+
+**Cách làm:**
+- **(a) Một tween OutBack** — gọn nhất. **Mức vượt của OutBack tính theo quãng đường (To − From), không theo scale gốc.** Với overshoot `s`, phần vượt ≈ `4s³ / (27(s+1)²)` × quãng đường:
+
+  | Overshoot `s` | Vượt (% quãng đường) | 0 → 1 cho đỉnh | 0.85 → 1 cho đỉnh |
+  |---|---|---|---|
+  | 1.0 | ~4% | 1.04 | 1.006 |
+  | 1.70158 (mặc định DOTween) | ~10% | 1.10 | 1.015 |
+  | 2.2 | ~15% | 1.15 | 1.023 |
+  | 3.0 | ~25% | 1.25 | 1.038 |
+  | 4.0 | ~38% | 1.38 | 1.057 |
+
+  - **Bẫy:** quãng ngắn (0.85 → 1, hay nhả nút 0.92 → 1) với overshoot mặc định gần như **không thấy vượt**. Popup 0.85 → 1 cần `s ≈ 3` để có đỉnh ~1.04; nhả nút 0.92 → 1 cần `s ≈ 4` để có đỉnh ~1.03.
+- **(b) Hai bước (Sequence)** — kiểm soát đỉnh và nhịp chính xác; dùng khi quãng ngắn hoặc cần đỉnh cụ thể:
+  ```csharp
+  // rest = scale gốc đã lưu; from / peak là hệ số (ví dụ 0 và 1.15)
+  _pop?.Kill();
+  target.localScale = rest * from;
+  _pop = DOTween.Sequence()
+      .Append(target.DOScale(rest * peak, duration * 0.65f).SetEase(Ease.OutQuad))
+      .Append(target.DOScale(rest, duration * 0.35f).SetEase(Ease.InOutSine))
+      .SetUpdate(true)                 // UI: unscaled time
+      .SetLink(target.gameObject);
+  ```
+- **(c) AnimationCurve** `(0 → from, 0.65 → peak, 1 → 1)` khi designer muốn tự vẽ hình.
+
+**Biến mất (chiều ngược):** gốc → hơi lớn hơn (1.05–1.1, lấy đà 40–80ms) → nhỏ về 0 với ease-in, **nhanh hơn lúc vào**. DOTween: tween 1 → 0 với `InBack` cho đúng hình này. Panel lớn đóng thì bỏ pha lấy đà, chỉ ease-in (3.2).
+
+**FeedbackKit:** dùng `ScaleTweenFeedback` với **`Shape = PeakThenSettle`** (From → Peak → To, `PeakAt`, `PeakEase`, `SettleEase`) — chính là cách (b), đặt đỉnh trực tiếp, không phải dò Overshoot. Intensity và Reduce motion chỉ co giãn phần vượt. `Shape = Direct` + OutBack là cách (a). Xem `FeedbackKit/README.md` mục 5.8.
+
 ---
 
 ## 5. Bộ công cụ FX (kèm thông số)
@@ -314,6 +361,7 @@ public class JuicyButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 | Kỹ thuật | Dùng khi | Thông số khởi điểm |
 |---|---|---|
 | **Scale punch** | Chạm, nhận item, đổi số | 1 → 1.15 → 1, 120–200ms, OutBack. Feel mặc định 0.2s, đỉnh ở 30% thời lượng `[nguồn: Feel MMF_Scale]` |
+| **Pop-in (xuất hiện)** | Vật, popup, sao, icon hiện ra | **Nhỏ → vượt gốc → gốc**: vật nhỏ 0 → 1.15–1.2 → 1; hero 0 → 1.25–1.3 → 1; popup 0.85 → 1.03–1.05 → 1; 0.2–0.35s. Xem 4.7 (bẫy OutBack với quãng ngắn) |
 | **Press down** | Nút, ô | Xem 3.1 |
 | **Squash & stretch** | Ô rơi chạm đáy, nảy, nổ | **Giữ thể tích:** `sx = s, sy = 2 - s` (hoặc 1/s). Hồi về 1 với ~20%/frame ở 60fps `[nguồn: deepnight]`. Chạm đáy: sy 0.85, sx 1.1–1.15, 80–120ms. **Tăng theo độ mạnh va chạm** (rơi càng cao càng squash mạnh) `[nguồn: deepnight heroSquash: 1 - 0.5*pow]` |
 | **Wobble khi xuất hiện/bị đánh** | Ô mới, phần thưởng | Keyframe scale: f0 (0.8, 1.2) → f5 (1.1, 0.9) → f10 (0.95, 1.05) → f20 (1, 1) `[nguồn: Reddit, một người]`. Lệch pha x và y cho cảm giác "jelly" |
@@ -408,7 +456,7 @@ public class JuicyButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 - Hexa Sort: người chơi khen riêng "tiếng khi chúng merge". `[nguồn: App Store review]`
 
 ### 6.10 Tạo power-up
-- **Visual:** các ô tham gia hút về điểm tạo; power-up bật ra với punch lớn và glow; khi nằm yên có ambient (lấp lánh, "thở").
+- **Visual:** các ô tham gia hút về điểm tạo; power-up bật ra với pop-in lớn (0 → 1.25–1.3 → 1, 4.7) và glow; khi nằm yên có ambient (lấp lánh, "thở").
 - **Sound:** âm "tạo ra" riêng. **Haptic:** medium.
 
 ### 6.11 Kích hoạt power-up
@@ -437,7 +485,7 @@ public class JuicyButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
   1. Dừng ngắn ~0.2s hoặc slow-mo cho sự kiện cuối.
   2. Chữ/âm ăn mừng (âm hero cố định).
   3. Nếu có: khoá input, đổi tài nguyên còn lại thành thưởng từng cái một với pitch tăng dần `[nguồn: Sugar Crush của Candy Crush]`.
-  4. Màn kết quả: điểm đếm dần (tạo hồi hộp "có được sao thứ 3 không?"); sao **đập vào** lần lượt ~0.3s/sao, mỗi sao một nốt cao hơn, punch và nổ hạt, có thể làm cả khung rung nhẹ cho có trọng lượng `[nguồn: Reddit: Jetpack Joyride, Angry Birds, Clash of Clans]`.
+  4. Màn kết quả: điểm đếm dần (tạo hồi hộp "có được sao thứ 3 không?"); sao **đập vào** lần lượt ~0.3s/sao (pop-in 0 → ~1.3 → 1, 4.7), mỗi sao một nốt cao hơn, punch và nổ hạt, có thể làm cả khung rung nhẹ cho có trọng lượng `[nguồn: Reddit: Jetpack Joyride, Angry Birds, Clash of Clans]`.
   5. Phần thưởng bay vào ví/HUD.
 - **Luôn tua được bằng chạm**, nút hiện ngay. Màn thưởng không tua được bị gọi là "nỗi phiền lớn" `[nguồn: Reddit về Jetpack Joyride]`.
 - **Kết quả hoàn hảo phải đặc biệt** (đổi màu, "Perfect!", confetti), thay vì làm kết quả thiếu sao trông xám xịt `[nguồn: Reddit, ý kiến một người]`.
@@ -680,6 +728,7 @@ public class JuicyButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 - **Feedback tiêu cực nặng nề.**
 - **Thiếu feedback cho sự kiện tự động** (cascade, xáo bàn).
 - **Tween chồng nhau** (không kill), punch bị trôi scale.
+- **Vật xuất hiện tween thẳng lên scale gốc** (không vượt) trông nhạt; hoặc dùng OutBack mặc định cho quãng ngắn (0.85 → 1, 0.92 → 1) nên gần như không thấy vượt (4.7).
 - **Khựng lần đầu** (shader, particle, font) và **GC spike** khi chạm.
 - **Reload scene giữa các level.**
 
@@ -709,6 +758,7 @@ public class JuicyButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 - [ ] Nút có cấu trúc Root (không scale) → Visual; press 0.92–0.95 khi down, OutBack khi up; kéo ra ngoài thì hủy.
 - [ ] Nút disabled có phản hồi; chống double-tap.
 - [ ] Popup mở 250–350ms, đóng nhanh hơn; chuyển màn ≤ ~400ms.
+- [ ] Vật/popup xuất hiện có pop-in **nhỏ → lớn hơn → gốc** với đỉnh nhìn thấy được (4.7).
 - [ ] Số trên HUD đếm dần và có punch.
 
 **Gameplay feedback**

@@ -301,6 +301,7 @@
 
 **R7. Panel / thẻ thưởng đảo ngược** (Cards UI):
 - Một player mỗi popup: SetActive (tự đảo khi chạy ngược) + CanvasGroup (0.2s mặc định) + Scale 0.8→1 (EaseOutOverhead) + sound OnlyWhenForwards.
+- Scale phải là pop-in **nhỏ → lớn hơn → gốc** (đỉnh ~1.03–1.05 cho popup). Quãng 0.8→1 ngắn nên overshoot mặc định gần như không thấy vượt — tăng overshoot hoặc dùng hai bước (guide 4.7; FeedbackKit: Scale Tween `Shape = PeakThenSettle`).
 - Mở = TopToBottom, đóng = BottomToTop.
 - Lật thẻ: Scale X 1 → 0 → 1 với MMTwoSidedUI ngưỡng 0.
 - Chặn nút khi `IsPlaying` (BlockerFeedbacks).
